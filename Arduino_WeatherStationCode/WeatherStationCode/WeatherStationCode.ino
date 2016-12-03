@@ -48,7 +48,7 @@ http://www.amazon.com/NOCO-GC018-Socket-Eyelet-Terminal/dp/B00G8WLW2Y/ref=sr_1_2
 #include <SFE_BMP180.h>
 #include <Wire.h>
 #include <FileIO.h>
-
+#include <OneWire.h>
 SFE_BMP180 pressure;
 
 #define ALTITUDE 240.585
@@ -57,6 +57,10 @@ SFE_BMP180 pressure;
 // digital I/O pins
 const byte WSPEED = 7;
 const byte RAIN = 1;
+const byte GROUND_TEMP  =4;
+
+
+OneWire ds(GROUND_TEMP);
 
 // analog I/O pins
 const byte WDIR = A0;
@@ -78,6 +82,7 @@ long lastMilliSecond = 0; //we will use this to help keep the reporting to every
 String lastDate = "";
 long timeSinceLastSolarSample = 0;
 long timeSinceLastWindSample = 0;
+long timeLastGroundTemp = 0;
 void setup()
 {
   wdt_reset(); //Pet the dog
@@ -108,7 +113,7 @@ void setup()
   timeSinceLastSolarSample = millis();
   timeSinceLastWindSample = millis();
   firstWindIRQ = lastWindCheck; //at boot we want to set this as our first check.
-
+timeLastGroundTemp=millis();
   bool pressureReady = pressure.begin();
 
   // Initialize the sensor (it is important to get calibration values stored on the device).
@@ -197,9 +202,64 @@ void loop()
     lastMilliSecond = millis();
   }
 
+//every 30 minutes write out the ground temp
+ if (millis() - timeLastGroundTemp >= 1800000)//180000)
+  {
+    postValueToServer(1, 15, String(GetGroundTemp()));
 
+    timeLastGroundTemp = millis();
+  }
   //Reset the watchdog timer.
   wdt_reset();
+}
+
+float GetGroundTemp(){
+//returns the temperature from one DS18S20 in DEG Celsius
+
+ byte data[12];
+ byte addr[8];
+
+ if ( !ds.search(addr)) {
+   //no more sensors on chain, reset search
+   ds.reset_search();
+   return -1000;
+ }
+
+ if ( OneWire::crc8( addr, 7) != addr[7]) {
+   Serial.println("CRC is not valid!");
+   return -1000;
+ }
+
+ if ( addr[0] != 0x10 && addr[0] != 0x28) {
+   Serial.print("Device is not recognized");
+   return -1000;
+ }
+
+ ds.reset();
+ ds.select(addr);
+ ds.write(0x44,1); // start conversion, with parasite power on at the end
+ 
+ delay(750); // Wait for temperature conversion to complete
+
+ byte present = ds.reset();
+ ds.select(addr);  
+ ds.write(0xBE); // Read Scratchpad
+
+ 
+ for (int i = 0; i < 9; i++) { // we need 9 bytes
+  data[i] = ds.read();
+ }
+ 
+ ds.reset_search();
+ 
+ byte MSB = data[1];
+ byte LSB = data[0];
+
+ float tempRead = ((MSB << 8) | LSB); //using two's compliment
+ float TemperatureSum = tempRead / 16;
+ 
+ return TemperatureSum;
+ 
 }
 
 void WriteLocalLogfile(String dataString) {
