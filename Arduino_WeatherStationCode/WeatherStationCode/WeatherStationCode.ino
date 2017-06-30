@@ -45,11 +45,12 @@ http://www.amazon.com/NOCO-GC018-Socket-Eyelet-Terminal/dp/B00G8WLW2Y/ref=sr_1_2
 */
 
 #include <avr/wdt.h> //We need watch dog for this program
-#include <SFE_BMP180.h>
 #include <Wire.h>
+#include "SPI.h"
 #include <FileIO.h>
 #include <OneWire.h>
-SFE_BMP180 pressure;
+#include "SparkFunBME280.h"
+BME280 pressure;
 
 #define ALTITUDE 240.585
 
@@ -88,6 +89,17 @@ void setup()
   wdt_reset(); //Pet the dog
   wdt_disable(); //We don't want the watchdog during init
 
+  
+  pressure.settings.commInterface = I2C_MODE;
+  pressure.settings.I2CAddress = 0x77;
+  pressure.settings.runMode = 3; //Forced mode
+  pressure.settings.tStandby = 0;
+  pressure.settings.filter = 0;
+  pressure.settings.tempOverSample = 1;
+  pressure.settings.pressOverSample = 1;
+  pressure.settings.humidOverSample = 1;
+  delay(5);  //Make sure sensor had enough time to turn on. BME280 requires 2ms to start up.
+  
   // put your setup code here, to run once:
   Serial.begin(9600);
   Bridge.begin();
@@ -188,15 +200,7 @@ void loop()
      wdt_reset();
     postValueToServer(1, 7, getBaro()); //baro
     wdt_reset();
-
-   
-    String dataRecord = "";
-    dataRecord = getTimeStamp() + " , " + windDir + " , " +
-                 windSpeed + " , " + windGust + " , " +
-                 get_rain_amount_inInches() + " , " +  getTempInC() + " , " +
-                 getBaro() + " , " + getAltimeter() + " , " +
-                 volts + " , " + mAmps + " , " + Watts;
-    WriteLocalLogfile(dataRecord);
+    
     //Serial.print(dataRecord);
     //when we are done collecting data reset our timer.
     lastMilliSecond = millis();
@@ -262,43 +266,6 @@ float GetGroundTemp(){
  
 }
 
-void WriteLocalLogfile(String dataString) {
-  //
-  //We need to prepare the filename we are going to write data into.
-  String fileName = getDate(); // get the day we are currently running
-
-  String filePath = "/mnt/sd/datalogs/" + fileName + ".csv\0";
-  char chFilePath[128];
-
-  filePath.toCharArray(chFilePath, 128);
-
-  //if the file already exists we need to use it or else we need to prepend the data with a header.
-  if (!FileSystem.exists(chFilePath) )
-  {
-    //
-    //open file and print the header
-    File dataFile = FileSystem.open(chFilePath, FILE_APPEND);
-    if (dataFile)
-    {
-      //
-      dataFile.print("DATE, WindDirection, WindSpeed (km/h), WindGustSpeed(km/hr),");
-      dataFile.println("Rain (mm), Temp (C), BARO (hPa), Altitude (M), Volts, mAmps, Watts");
-      dataFile.close();
-    }
-
-  }
-
-  File dataFile = FileSystem.open(chFilePath, FILE_APPEND);
-  if (dataFile)
-  {
-    dataFile.println(dataString);
-    //we are done so close the file.
-    dataFile.close();
-  }
-}
-
-
-
 void rainIRQ()
 // Count rain gauge bucket tips as they occur
 // Activated by the magnet and reed switch in the rain gauge, attached to input D2
@@ -325,71 +292,27 @@ float get_rain_amount_inInches()
   rainClicks = 0;
   return rainAmount;
 }
+String tempC = "";
+String baro = "";
+String altimeter = "";
+String humidity="";
 
 /// <summary>
 /// a function to build the baro metric sensor's string of values
 /// </summary>
 /// <returns>TEMP, PRESSURE, ALTITUDE</returns>
-String tempC = "";
-String baro = "";
-String altimeter = "";
 void sampleTempAndBaroData() {
 
   //NOTE: I discovered that the yun seems to have troubles when I use the STRING for return value of the function.
   //Everytime I called this function with a STRING...it would lock up.
   char status;
   double T, P, p0, a;
-
-  status = pressure.startTemperature();
-  if (status != 0)
-  {
-    // Wait for the measurement to complete:
-    delay(status);
-
-    // Retrieve the completed temperature measurement:
-    // Note that the measurement is stored in the variable T.
-    // Function returns 1 if successful, 0 if failure.
-
-    status = pressure.getTemperature(T);
-    if (status != 0)
-    {
-
-      tempC = String(T);
-
-      // Start a pressure measurement:
-      // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
-      // If request is successful, the number of ms to wait is returned.
-      // If request is unsuccessful, 0 is returned.
-
-      status = pressure.startPressure(3);
-      if (status != 0)
-      {
-        // Wait for the measurement to complete:
-        delay(status);
-
-        // Retrieve the completed pressure measurement:
-        // Note that the measurement is stored in the variable P.
-        // Note also that the function requires the previous temperature measurement (T).
-        // (If temperature is stable, you can do one temperature measurement for a number of pressure measurements.)
-        // Function returns 1 if successful, 0 if failure.
-
-        status = pressure.getPressure(P, T);
-        if (status != 0)
-        {
-
-          p0 = pressure.sealevel(P, ALTITUDE); // we're at 1655 meters (Boulder, CO)
-          baro = String(p0);
-
-          a = pressure.altitude(P, p0);
-          altimeter = String(a);
-        }
-        else Serial.println("error retrieving pressure measurement\n");
-      }
-      else Serial.println("error starting pressure measurement\n");
-    }
-    else Serial.println("error retrieving temperature measurement\n");
-  }
-  else Serial.println("error starting temperature measurement\n");
+tempC= String(pressure.readTempC());
+humidity = String(pressure.readFloatHumidity());
+//convert from kpa to hpa
+baro = String(pressure.readFloatPressure()*0.1);
+altimeter = String(pressure.readFloatAltitudeMeters());
+       
 }
 String getTempInC()
 {
@@ -402,6 +325,9 @@ String getBaro()
 String getAltimeter()
 {
   return altimeter;
+}
+String getHumidity(){
+  return humidity;
 }
 
 
