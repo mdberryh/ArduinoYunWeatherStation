@@ -310,7 +310,7 @@ void sampleTempAndBaroData() {
 tempC= String(pressure.readTempC());
 humidity = String(pressure.readFloatHumidity());
 //convert from kpa to hpa
-baro = String(pressure.readFloatPressure()*0.1);
+baro = String(pressure.readFloatPressure()*10);
 altimeter = String(pressure.readFloatAltitudeMeters());
        
 }
