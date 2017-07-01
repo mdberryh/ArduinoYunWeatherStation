@@ -310,7 +310,26 @@ void sampleTempAndBaroData() {
 tempC= String(pressure.readTempC());
 humidity = String(pressure.readFloatHumidity());
 //convert from kpa to hpa
-baro = String(pressure.readFloatPressure()*10);
+//Need to adjust pressire for current altitude.
+float p = pressure.readFloatPressure();
+//Pressure drops 26 mm Hg (~ 1.0 inches) every 1000 ft
+// 26 mm Hg = 3.4663821400000003 kPa
+// normal sea pressure is 760 mm Hg
+// aka (101.325 kPa)
+
+//doing the same calculations in kPa:
+//sealevel 101.325 kPa
+// pressure at 1000FT = 97.85863426 kPa
+// drop per foot = 3.46636574 / 1000 ft
+// CF = pressure at sealevel - (altitude * drop) / pressure at sea
+// CF = 101.325 - (785.76 * 0.003466) / 101.325 = 0.97311
+//Correction factor = (760 - altitude * 0.026) / 760
+//at current weather station location 785.76ft or 239.499648m
+//CF = 0.991806591
+//https://www.daftlogic.com/sandbox-google-maps-find-altitude.htm
+float correctionFactor = 0.973;
+float correctedP = p/correctionFactor;
+baro = String(correctedP/100);
 altimeter = String(pressure.readFloatAltitudeMeters());
        
 }
