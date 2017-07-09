@@ -175,6 +175,7 @@ void loop()
     String volts = get_solar_volts();
     String mAmps = get_solar_mAmps();
     String Watts = get_solar_watts();
+    
     wdt_reset();
     //WriteToLogFile("Temp: " + temp);
     //RESET COUNTERS
@@ -183,7 +184,7 @@ void loop()
     
     //we have to do a hack to get the string to work...arduino doesn't like long strings...
     //we have a buffer with 225 characters...we will have to insert string then shift then instert other part.
-
+  //parameters are: sensor device pk, data_value_category, value
     postValueToServer(1, 1, getTempInC()); //temp
      wdt_reset();
     postValueToServer(1, 12, windSpeed); //windSpeed
@@ -200,7 +201,9 @@ void loop()
      wdt_reset();
     postValueToServer(1, 7, getBaro()); //baro
     wdt_reset();
-    
+    postValueToServer(1, 17, getHumidity()); //Humidity
+    wdt_reset();
+        
     //Serial.print(dataRecord);
     //when we are done collecting data reset our timer.
     lastMilliSecond = millis();
